@@ -119,11 +119,11 @@ export default function ShipwreckedSketchAI() {
   useEffect(() => {
     if (isMicActive) {
       // Map volume to stroke width (1-20px)
-      const newStrokeWidth = Math.max(1, Math.min(20, currentVolume * 100));
+      const newStrokeWidth = Math.max(5, Math.min(40, currentVolume * 200));
       setStrokeWidth(newStrokeWidth);
 
-      // Map pitch to color hue
-      const hue = Math.min(360, currentPitch / 10);
+      // Map pitch to color hue - faster cycling
+      const hue = (currentPitch * 10) % 360; // Cycle through colors more quickly
       const saturation = Math.min(100, 50 + currentVolume * 50);
       const lightness = Math.min(80, 30 + currentVolume * 30);
       setStrokeColor(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
@@ -137,8 +137,11 @@ export default function ShipwreckedSketchAI() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
     // Create ink splatter effect
     if (Math.random() > 0.7) {
@@ -164,8 +167,11 @@ export default function ShipwreckedSketchAI() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
     // Occasional ink splatter while drawing
     if (Math.random() > 0.95) {
