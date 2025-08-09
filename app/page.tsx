@@ -1,178 +1,190 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState, useRef, useEffect, useCallback } from "react"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Compass, Anchor, Map, Trash2, Send } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Compass, Anchor, Map, Trash2, Send } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ShipwreckedSketchAI() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [isDrawing, setIsDrawing] = useState(false)
-  const [isMicActive, setIsMicActive] = useState(false)
-  const [selectedModel, setSelectedModel] = useState("gpt-4o")
-  const [aiDescription, setAiDescription] = useState("")
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [currentVolume, setCurrentVolume] = useState(0)
-  const [currentPitch, setCurrentPitch] = useState(0)
-  const [inkSplatters, setInkSplatters] = useState<Array<{ id: number; x: number; y: number; size: number }>>([])
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [isMicActive, setIsMicActive] = useState(false);
+  const [selectedModel, setSelectedModel] = useState(
+    "qwen/qwen2.5-vl-32b-instruct:free"
+  );
+  const [aiDescription, setAiDescription] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentVolume, setCurrentVolume] = useState(0);
+  const [currentPitch, setCurrentPitch] = useState(0);
+  const [inkSplatters, setInkSplatters] = useState<
+    Array<{ id: number; x: number; y: number; size: number }>
+  >([]);
 
-  const { toast } = useToast()
+  const { toast } = useToast();
 
   // Audio context and analyzer
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const analyzerRef = useRef<AnalyserNode | null>(null)
-  const micStreamRef = useRef<MediaStream | null>(null)
-  const animationFrameRef = useRef<number>()
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyzerRef = useRef<AnalyserNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number>();
 
   // Drawing state
-  const [strokeWidth, setStrokeWidth] = useState(3)
-  const [strokeColor, setStrokeColor] = useState("#8B4513")
+  const [strokeWidth, setStrokeWidth] = useState(3);
+  const [strokeColor, setStrokeColor] = useState("#8B4513");
 
   // Initialize microphone and audio analysis
   const startMicrophone = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      micStreamRef.current = stream
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
 
-      audioContextRef.current = new AudioContext()
-      const source = audioContextRef.current.createMediaStreamSource(stream)
-      analyzerRef.current = audioContextRef.current.createAnalyser()
+      audioContextRef.current = new AudioContext();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      analyzerRef.current = audioContextRef.current.createAnalyser();
 
-      analyzerRef.current.fftSize = 2048
-      source.connect(analyzerRef.current)
+      analyzerRef.current.fftSize = 2048;
+      source.connect(analyzerRef.current);
 
-      setIsMicActive(true)
-      analyzeAudio()
+      setIsMicActive(true);
+      analyzeAudio();
     } catch (error) {
-      console.error("Error accessing microphone:", error)
+      console.error("Error accessing microphone:", error);
     }
-  }, [])
+  }, []);
 
   const stopMicrophone = useCallback(() => {
     if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((track) => track.stop())
-      micStreamRef.current = null
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
     }
     if (audioContextRef.current) {
-      audioContextRef.current.close()
-      audioContextRef.current = null
+      audioContextRef.current.close();
+      audioContextRef.current = null;
     }
     if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current)
+      cancelAnimationFrame(animationFrameRef.current);
     }
-    setIsMicActive(false)
-    setCurrentVolume(0)
-    setCurrentPitch(0)
-  }, [])
+    setIsMicActive(false);
+    setCurrentVolume(0);
+    setCurrentPitch(0);
+  }, []);
 
   const analyzeAudio = useCallback(() => {
-    if (!analyzerRef.current) return
+    if (!analyzerRef.current) return;
 
-    const bufferLength = analyzerRef.current.frequencyBinCount
-    const dataArray = new Uint8Array(bufferLength)
-    const frequencyArray = new Uint8Array(bufferLength)
+    const bufferLength = analyzerRef.current.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    const frequencyArray = new Uint8Array(bufferLength);
 
-    analyzerRef.current.getByteTimeDomainData(dataArray)
-    analyzerRef.current.getByteFrequencyData(frequencyArray)
+    analyzerRef.current.getByteTimeDomainData(dataArray);
+    analyzerRef.current.getByteFrequencyData(frequencyArray);
 
     // Calculate volume (RMS)
-    let sum = 0
+    let sum = 0;
     for (let i = 0; i < bufferLength; i++) {
-      const sample = (dataArray[i] - 128) / 128
-      sum += sample * sample
+      const sample = (dataArray[i] - 128) / 128;
+      sum += sample * sample;
     }
-    const volume = Math.sqrt(sum / bufferLength)
-    setCurrentVolume(volume)
+    const volume = Math.sqrt(sum / bufferLength);
+    setCurrentVolume(volume);
 
     // Calculate dominant frequency (pitch)
-    let maxIndex = 0
-    let maxValue = 0
+    let maxIndex = 0;
+    let maxValue = 0;
     for (let i = 0; i < frequencyArray.length; i++) {
       if (frequencyArray[i] > maxValue) {
-        maxValue = frequencyArray[i]
-        maxIndex = i
+        maxValue = frequencyArray[i];
+        maxIndex = i;
       }
     }
-    const pitch = (maxIndex * (audioContextRef.current?.sampleRate || 44100)) / (2 * bufferLength)
-    setCurrentPitch(pitch)
+    const pitch =
+      (maxIndex * (audioContextRef.current?.sampleRate || 44100)) /
+      (2 * bufferLength);
+    setCurrentPitch(pitch);
 
-    animationFrameRef.current = requestAnimationFrame(analyzeAudio)
-  }, [])
+    animationFrameRef.current = requestAnimationFrame(analyzeAudio);
+  }, []);
 
   // Update drawing parameters based on audio
   useEffect(() => {
     if (isMicActive) {
       // Map volume to stroke width (1-20px)
-      const newStrokeWidth = Math.max(1, Math.min(20, currentVolume * 100))
-      setStrokeWidth(newStrokeWidth)
+      const newStrokeWidth = Math.max(1, Math.min(20, currentVolume * 100));
+      setStrokeWidth(newStrokeWidth);
 
       // Map pitch to color hue
-      const hue = Math.min(360, currentPitch / 10)
-      const saturation = Math.min(100, 50 + currentVolume * 50)
-      const lightness = Math.min(80, 30 + currentVolume * 30)
-      setStrokeColor(`hsl(${hue}, ${saturation}%, ${lightness}%)`)
+      const hue = Math.min(360, currentPitch / 10);
+      const saturation = Math.min(100, 50 + currentVolume * 50);
+      const lightness = Math.min(80, 30 + currentVolume * 30);
+      setStrokeColor(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
     }
-  }, [currentVolume, currentPitch, isMicActive])
+  }, [currentVolume, currentPitch, isMicActive]);
 
   // Canvas drawing functions
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    setIsDrawing(true)
-    const canvas = canvasRef.current
-    if (!canvas) return
+    setIsDrawing(true);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     // Create ink splatter effect
     if (Math.random() > 0.7) {
       // 30% chance for splatter
-      createInkSplatter(x, y)
+      createInkSplatter(x, y);
     }
 
-    const ctx = canvas.getContext("2d")
+    const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.beginPath()
-      ctx.moveTo(x, y)
-      ctx.lineWidth = strokeWidth
-      ctx.strokeStyle = strokeColor
-      ctx.lineCap = "round"
-      ctx.lineJoin = "round"
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineWidth = strokeWidth;
+      ctx.strokeStyle = strokeColor;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
     }
-  }
+  };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return
+    if (!isDrawing) return;
 
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     // Occasional ink splatter while drawing
     if (Math.random() > 0.95) {
       // 5% chance for splatter while drawing
-      createInkSplatter(x, y)
+      createInkSplatter(x, y);
     }
 
-    const ctx = canvas.getContext("2d")
+    const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.lineWidth = strokeWidth
-      ctx.strokeStyle = strokeColor
-      ctx.lineTo(x, y)
-      ctx.stroke()
+      ctx.lineWidth = strokeWidth;
+      ctx.strokeStyle = strokeColor;
+      ctx.lineTo(x, y);
+      ctx.stroke();
     }
-  }
+  };
 
   const stopDrawing = () => {
-    setIsDrawing(false)
-  }
+    setIsDrawing(false);
+  };
 
   const createInkSplatter = (x: number, y: number) => {
     const newSplatter = {
@@ -180,92 +192,132 @@ export default function ShipwreckedSketchAI() {
       x: x + (Math.random() - 0.5) * 40,
       y: y + (Math.random() - 0.5) * 40,
       size: Math.random() * 20 + 10,
-    }
-    setInkSplatters((prev) => [...prev, newSplatter])
+    };
+    setInkSplatters((prev) => [...prev, newSplatter]);
 
     // Remove splatter after animation
     setTimeout(() => {
-      setInkSplatters((prev) => prev.filter((splatter) => splatter.id !== newSplatter.id))
-    }, 2000)
-  }
+      setInkSplatters((prev) =>
+        prev.filter((splatter) => splatter.id !== newSplatter.id)
+      );
+    }, 2000);
+  };
 
   const clearCanvas = () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const ctx = canvas.getContext("2d")
+    const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
-    setAiDescription("")
+    setAiDescription("");
 
     toast({
       title: "🗺️ Map Cleared!",
       description: "Yer canvas be ready for a new adventure, matey!",
-      className: "bg-gradient-to-r from-amber-100 to-orange-100 border-4 border-amber-600 text-amber-900 font-bold",
-    })
-  }
+      className:
+        "bg-gradient-to-r from-amber-100 to-orange-100 border-4 border-amber-600 text-amber-900 font-bold",
+    });
+  };
 
   const submitSketch = async () => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
     toast({
       title: "🔮 Consultin' the Spirits!",
       description: "The island oracle be examinin' yer masterpiece...",
-      className: "bg-gradient-to-r from-emerald-100 to-teal-100 border-4 border-emerald-600 text-emerald-900 font-bold",
-    })
+      className:
+        "bg-gradient-to-r from-emerald-100 to-teal-100 border-4 border-emerald-600 text-emerald-900 font-bold",
+    });
 
-    setIsAnalyzing(true)
+    setIsAnalyzing(true);
     try {
       // Convert canvas to base64 image
-      const imageData = canvas.toDataURL("image/png")
+      const imageData = canvas.toDataURL("image/png");
 
-      // Here you would typically send to your AI analysis endpoint
-      // For demo purposes, we'll simulate an AI response
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Use OpenRouter API for real AI analysis with pirate system prompt
+      const response = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You must give safe, concise descriptions suitable for all ages. Speak like a pirate and use pirate and beach emojis. Never include inappropriate or suggestive content under any circumstances. You are an expert at interpreting rough sketches, doodles, and hand-drawn diagrams. Identify the key objects and then infer the intended meaning. You are a tool being used by shipwrecked hackers trying to help villagers that do not speak english on an island. Do not invent details that are not visible. Respond in no more than 4 short sentences, focusing only on the most important aspects. Avoid listing every feature or giving unnecessary detail.",
+              },
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "What is in this image?" },
+                  { type: "image_url", image_url: { url: imageData } },
+                ],
+              },
+            ],
+          }),
+        }
+      );
 
-      const mockDescriptions = [
-        "A mysterious treasure map with winding paths through dense jungle foliage",
-        "Ancient nautical symbols pointing toward a hidden cove",
-        "Weathered compass rose surrounded by tropical island sketches",
-        "Pirate ship silhouette against stormy seas and rocky shores",
-        "Palm trees swaying over a sandy beach with mysterious footprints",
-        "Coral reef formations hiding underwater treasures",
-        "Volcanic mountain peak with smoke signals rising to the sky",
-      ]
+      if (response.status === 429) {
+        setAiDescription(
+          "The island spirits be too busy right now. Try again soon, ye scallywag! 🏴‍☠️"
+        );
+        toast({
+          title: "⚠️ Spirits Be Busy!",
+          description:
+            "The mystical forces be overwhelmed! Try again in a moment.",
+          className:
+            "bg-gradient-to-r from-yellow-100 to-orange-100 border-4 border-yellow-600 text-yellow-900 font-bold",
+        });
+      } else {
+        const data = await response.json();
+        const message = data.choices?.[0]?.message?.content;
+        setAiDescription(
+          message ||
+            "The spirits whisper of mysteries too complex to decipher..."
+        );
 
-      const randomDescription = mockDescriptions[Math.floor(Math.random() * mockDescriptions.length)]
-      setAiDescription(randomDescription)
-
-      toast({
-        title: "⚡ Spirits Have Spoken!",
-        description: "The mystical interpretation be revealed, ye scallywag!",
-        className: "bg-gradient-to-r from-yellow-100 to-amber-100 border-4 border-yellow-600 text-amber-900 font-bold",
-      })
+        toast({
+          title: "⚡ Spirits Have Spoken!",
+          description: "The mystical interpretation be revealed, ye scallywag!",
+          className:
+            "bg-gradient-to-r from-yellow-100 to-amber-100 border-4 border-yellow-600 text-amber-900 font-bold",
+        });
+      }
     } catch (error) {
-      console.error("Error analyzing sketch:", error)
-      setAiDescription("The island spirits whisper of mysteries too complex to decipher...")
+      console.error("Error analyzing sketch:", error);
+      setAiDescription(
+        "The island spirits whisper of mysteries too complex to decipher..."
+      );
 
       toast({
         title: "💀 Spirits Be Silent!",
         description: "The mystical forces be too powerful to interpret...",
-        className: "bg-gradient-to-r from-red-100 to-orange-100 border-4 border-red-600 text-red-900 font-bold",
-      })
+        className:
+          "bg-gradient-to-r from-red-100 to-orange-100 border-4 border-red-600 text-red-900 font-bold",
+      });
     } finally {
-      setIsAnalyzing(false)
+      setIsAnalyzing(false);
     }
-  }
+  };
 
   useEffect(() => {
     return () => {
-      stopMicrophone()
-    }
-  }, [stopMicrophone])
+      stopMicrophone();
+    };
+  }, [stopMicrophone]);
 
   useEffect(() => {
-    startMicrophone()
-  }, [startMicrophone])
+    startMicrophone();
+  }, [startMicrophone]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-100 relative overflow-hidden">
@@ -291,7 +343,7 @@ export default function ShipwreckedSketchAI() {
         className="absolute inset-0 bg-no-repeat bg-center bg-contain opacity-5"
         style={{
           backgroundImage: "url('/pirate-ship-silhouette.webp')",
-          backgroundSize: "60%",
+          backgroundSize: "100%",
           transform: "rotate(-5deg)",
         }}
       ></div>
@@ -315,7 +367,9 @@ export default function ShipwreckedSketchAI() {
               </div>
               <h1
                 className="text-5xl md:text-7xl font-black text-amber-900 tracking-wider drop-shadow-2xl transform -rotate-1"
-                style={{ fontFamily: "'Pirata One', 'Creepster', cursive, serif" }}
+                style={{
+                  fontFamily: "'Pirata One', 'Creepster', cursive, serif",
+                }}
               >
                 SHIPWRECKED SKETCHES
               </h1>
@@ -323,13 +377,22 @@ export default function ShipwreckedSketchAI() {
                 <Anchor className="w-16 h-16 text-amber-800 drop-shadow-lg animate-bounce" />
                 <div className="absolute -top-2 -right-2 w-4 h-4 bg-yellow-400 rounded-full animate-ping"></div>
               </div>
+              <div className="relative ml-4">
+                <img
+                  src="/villager.png"
+                  alt="Island Villager"
+                  className="w-16 h-16 rounded-full border-4 border-amber-600 shadow-lg animate-pulse"
+                />
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-400 rounded-full border-2 border-white animate-ping"></div>
+              </div>
             </div>
             <div className="relative">
               <p
                 className="text-xl text-amber-800 font-bold tracking-wide transform rotate-1 drop-shadow-lg"
                 style={{ fontFamily: "'Kalam', 'Caveat', cursive" }}
               >
-                ⚓ Chart yer imagination on this cursed island canvas, matey! ⚓
+                🎨 Draw with yer voice & get mystical translations for the
+                villagers! 🎤⚓
               </p>
               <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-32 h-1 bg-gradient-to-r from-transparent via-amber-600 to-transparent"></div>
             </div>
@@ -362,10 +425,14 @@ export default function ShipwreckedSketchAI() {
                       <div className="w-20 h-2 bg-amber-200 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-amber-600 transition-all duration-100"
-                          style={{ width: `${Math.min(100, currentVolume * 500)}%` }}
+                          style={{
+                            width: `${Math.min(100, currentVolume * 500)}%`,
+                          }}
                         ></div>
                       </div>
-                      <span className="text-xs">Width: {strokeWidth.toFixed(1)}px</span>
+                      <span className="text-xs">
+                        Width: {strokeWidth.toFixed(1)}px
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span>Pitch:</span>
@@ -373,7 +440,9 @@ export default function ShipwreckedSketchAI() {
                         className="w-6 h-6 rounded-full border-2 border-amber-600"
                         style={{ backgroundColor: strokeColor }}
                       ></div>
-                      <span className="text-xs">{currentPitch.toFixed(0)}Hz</span>
+                      <span className="text-xs">
+                        {currentPitch.toFixed(0)}Hz
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -417,7 +486,7 @@ export default function ShipwreckedSketchAI() {
                       top: splatter.y,
                       width: splatter.size,
                       height: splatter.size,
-                      backgroundImage: "url('/ink-splatter.png')",
+                      backgroundImage: "url('/ink.png')",
                       backgroundSize: "contain",
                       backgroundRepeat: "no-repeat",
                       backgroundPosition: "center",
@@ -432,7 +501,7 @@ export default function ShipwreckedSketchAI() {
                 <div
                   className="absolute inset-0 w-full h-full border-4 border-amber-700 rounded-lg pointer-events-none z-20 opacity-30"
                   style={{
-                    backgroundImage: "url('/parchment-texture.png')",
+                    backgroundImage: "url('/parchment-texture.webp')",
                     backgroundSize: "cover",
                     backgroundPosition: "center",
                     backgroundRepeat: "no-repeat",
@@ -443,7 +512,7 @@ export default function ShipwreckedSketchAI() {
                 {/* Wax seals in corners */}
                 <div className="absolute -top-6 -left-6 w-16 h-16 z-30 opacity-80 transform rotate-12">
                   <img
-                    src="/wax-seal.png"
+                    src="/waxseal.png"
                     alt="Wax Seal"
                     className="w-full h-full drop-shadow-lg animate-pulse"
                     style={{ animationDuration: "4s" }}
@@ -452,7 +521,7 @@ export default function ShipwreckedSketchAI() {
 
                 <div className="absolute -top-6 -right-6 w-16 h-16 z-30 opacity-80 transform -rotate-12">
                   <img
-                    src="/wax-seal.png"
+                    src="/waxseal.png"
                     alt="Wax Seal"
                     className="w-full h-full drop-shadow-lg animate-pulse"
                     style={{ animationDuration: "4s", animationDelay: "1s" }}
@@ -461,7 +530,7 @@ export default function ShipwreckedSketchAI() {
 
                 <div className="absolute -bottom-6 -left-6 w-16 h-16 z-30 opacity-80 transform -rotate-12">
                   <img
-                    src="/wax-seal.png"
+                    src="/waxseal.png"
                     alt="Wax Seal"
                     className="w-full h-full drop-shadow-lg animate-pulse"
                     style={{ animationDuration: "4s", animationDelay: "2s" }}
@@ -470,7 +539,7 @@ export default function ShipwreckedSketchAI() {
 
                 <div className="absolute -bottom-6 -right-6 w-16 h-16 z-30 opacity-80 transform rotate-12">
                   <img
-                    src="/wax-seal.png"
+                    src="/waxseal.png"
                     alt="Wax Seal"
                     className="w-full h-full drop-shadow-lg animate-pulse"
                     style={{ animationDuration: "4s", animationDelay: "3s" }}
@@ -479,7 +548,10 @@ export default function ShipwreckedSketchAI() {
 
                 {/* Decorative compass rose overlay */}
                 <div className="absolute top-4 right-4 w-16 h-16 opacity-20 z-30">
-                  <Compass className="w-full h-full text-amber-800 animate-spin" style={{ animationDuration: "20s" }} />
+                  <Compass
+                    className="w-full h-full text-amber-800 animate-spin"
+                    style={{ animationDuration: "20s" }}
+                  />
                 </div>
 
                 {/* Additional parchment aging effects */}
@@ -546,14 +618,29 @@ export default function ShipwreckedSketchAI() {
                     <SelectValue placeholder="Choose yer mystical guide..." />
                   </SelectTrigger>
                   <SelectContent className="bg-amber-50 border-4 border-amber-600">
-                    <SelectItem value="gpt-4o" className="font-bold text-amber-900">
-                      ⚡ Wise Elder (GPT-4)
+                    <SelectItem
+                      value="qwen/qwen2.5-vl-32b-instruct:free"
+                      className="font-bold text-amber-900"
+                    >
+                      🧙‍♂️ Qwen 2.5-vl (Vision Expert)
                     </SelectItem>
-                    <SelectItem value="gpt-3.5-turbo" className="font-bold text-amber-900">
-                      🌟 Island Shaman (GPT-3.5)
+                    <SelectItem
+                      value="google/gemini-2.0-flash-exp:free"
+                      className="font-bold text-amber-900"
+                    >
+                      ⚡ Gemini 2.0 Flash (Swift Oracle)
                     </SelectItem>
-                    <SelectItem value="claude" className="font-bold text-amber-900">
-                      👻 Ancient Spirit (Claude)
+                    <SelectItem
+                      value="mistralai/mistral-small-3.2-24b-instruct:free"
+                      className="font-bold text-amber-900"
+                    >
+                      🌟 Mistral Small 3.2 (Island Shaman)
+                    </SelectItem>
+                    <SelectItem
+                      value="meta-llama/llama-3.2-11b-vision-instruct:free"
+                      className="font-bold text-amber-900"
+                    >
+                      🦙 Llama 3.2 Vision (Ancient Spirit)
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -583,7 +670,10 @@ export default function ShipwreckedSketchAI() {
                       <Compass className="w-16 h-16 text-amber-600 animate-spin mx-auto mb-6" />
                       <div
                         className="absolute inset-0 w-16 h-16 border-4 border-dashed border-yellow-500 rounded-full animate-spin opacity-50"
-                        style={{ animationDirection: "reverse", animationDuration: "3s" }}
+                        style={{
+                          animationDirection: "reverse",
+                          animationDuration: "3s",
+                        }}
                       ></div>
                     </div>
                     <p
@@ -620,7 +710,8 @@ export default function ShipwreckedSketchAI() {
                     className="text-center py-12 text-amber-700 font-bold text-lg"
                     style={{ fontFamily: "'Kalam', cursive" }}
                   >
-                    🎨 Draw yer vision and let the island spirits reveal its secrets, ye landlubber! 🏴‍☠️
+                    🎨 Draw yer vision and let the island spirits reveal its
+                    secrets, ye landlubber! 🏴‍☠️
                   </div>
                 )}
               </div>
@@ -629,5 +720,5 @@ export default function ShipwreckedSketchAI() {
         </div>
       </div>
     </div>
-  )
+  );
 }
