@@ -41,6 +41,10 @@ export default function ShipwreckedSketchAI() {
   // Drawing state
   const [strokeWidth, setStrokeWidth] = useState(3);
   const [strokeColor, setStrokeColor] = useState("#8B4513");
+  const [lastPosition, setLastPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   // Initialize microphone and audio analysis
   const startMicrophone = useCallback(async () => {
@@ -143,6 +147,8 @@ export default function ShipwreckedSketchAI() {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
+    setLastPosition({ x, y });
+
     // Create ink splatter effect
     if (Math.random() > 0.7) {
       // 30% chance for splatter
@@ -151,17 +157,16 @@ export default function ShipwreckedSketchAI() {
 
     const ctx = canvas.getContext("2d");
     if (ctx) {
+      // Draw a dot for single clicks
       ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineWidth = strokeWidth;
-      ctx.strokeStyle = strokeColor;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
+      ctx.arc(x, y, strokeWidth / 2, 0, Math.PI * 2);
+      ctx.fillStyle = strokeColor;
+      ctx.fill();
     }
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawing || !lastPosition) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -181,15 +186,24 @@ export default function ShipwreckedSketchAI() {
 
     const ctx = canvas.getContext("2d");
     if (ctx) {
+      // Draw line segment from last position to current position with current color
+      ctx.beginPath();
+      ctx.moveTo(lastPosition.x, lastPosition.y);
+      ctx.lineTo(x, y);
       ctx.lineWidth = strokeWidth;
       ctx.strokeStyle = strokeColor;
-      ctx.lineTo(x, y);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
       ctx.stroke();
     }
+
+    // Update last position
+    setLastPosition({ x, y });
   };
 
   const stopDrawing = () => {
     setIsDrawing(false);
+    setLastPosition(null);
   };
 
   const createInkSplatter = (x: number, y: number) => {
